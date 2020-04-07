@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -208,9 +209,15 @@ namespace Async
         }
 
         [Fact]
-        public async Task WhenAllUsedAndOneTaskThrowsException_SameExceptionThrownFromWhenAll()
+        public async Task WhenAllUsedAndOneTaskThrowsException_WhenAllWaitsForOtherTaskToFinishAndSameExceptionIsThrown()
         {
-            var task1 = Task.Delay(TimeSpan.FromDays(10));
+            var task1Finished = false;
+            var task1 = Task.Run(async () =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(4));
+                task1Finished = true;
+            });
+
             var task2 = ThrowDelayedException();
 
             var catched = false;
@@ -219,11 +226,41 @@ namespace Async
             {
                 await Task.WhenAll(task1, task2);
             }
-            catch(InvalidOperationException)
+            catch(InvalidOperationException e)
             {
                 catched = true;
+                Assert.Equal("My Exception", e.Message);
             }
 
+            Assert.True(catched);
+            Assert.True(task1Finished);
+        }
+
+        [Fact]
+        public async Task WhenAllUsedAndTwoTasksThrowExceptions_FirstTasksExceptionIsThrownAndWhenAllTaskContainsAllExceptions()
+        {
+            var task1 = ThrowDelayedException(4, "Exception 1");
+            var task2 = ThrowDelayedException(2, "Exception 2");
+
+            var catched = false;
+            Task whenAllTask = null;
+
+            try
+            {
+                whenAllTask = Task.WhenAll(task1, task2);
+                await whenAllTask;
+            }
+            catch (InvalidOperationException e)
+            {
+                catched = true;
+                Assert.Equal("Exception 1", e.Message);
+            }
+
+            Assert.True(whenAllTask.IsCompleted);
+            Assert.False(whenAllTask.IsCompletedSuccessfully);
+            Assert.True(whenAllTask.IsFaulted);
+            Assert.IsType<AggregateException>(whenAllTask.Exception);
+            Assert.Equal(2, whenAllTask.Exception.InnerExceptions.Count);
             Assert.True(catched);
         }
 
@@ -232,10 +269,10 @@ namespace Async
             throw new InvalidOperationException("My Exception");
         }
 
-        private async Task ThrowDelayedException(int seconds = 1)
+        private async Task ThrowDelayedException(int seconds = 1, string message = "My Exception")
         {
             await Task.Delay(TimeSpan.FromSeconds(seconds));
-            throw new InvalidOperationException("My Exception");
+            throw new InvalidOperationException(message);
         }
     }
 }
