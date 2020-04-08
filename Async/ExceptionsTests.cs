@@ -62,7 +62,7 @@ namespace Async
         }
 
         [Fact]
-        public Task ThrowDelayedExceptionInNotAwaitedTask_ProgramFinishesBeforeExceptionIsThrown()
+        public Task ThrowDelayedExceptionInNotAwaitedTaskAndProgramFinishesBeforeExceptionIsThrown_NoExceptionThrown()
         {
             try
             {
@@ -74,6 +74,39 @@ namespace Async
             }
 
             return Task.CompletedTask;
+        }
+
+        [Fact]
+        public async Task ThrowDelayedExceptionInNotAwaitedTaskAndProgramFinishesAfterExceptionIsThrown_NoExceptionThrownAndTaskIsFaultedWithAggregateException()
+        {
+            var task = ThrowDelayedException();
+            await Task.Delay(TimeSpan.FromSeconds(3));
+
+            Assert.True(task.IsFaulted);
+            Assert.IsType<AggregateException>(task.Exception);
+            Assert.Equal("My Exception", task.Exception.InnerException.Message);
+        }
+
+        [Fact]
+        public async Task ThrowDelayedExceptionInNotAwaitedTaskAndAwaitItAfterItsFaulted_OriginalExceptionIsThrownOnAwait()
+        {
+            var task = ThrowDelayedException();
+            await Task.Delay(TimeSpan.FromSeconds(3));
+
+            Assert.True(task.IsFaulted);
+
+            var catched = false;
+            try
+            {
+                await task;
+            }
+            catch (InvalidOperationException e)
+            {
+                catched = true;
+                Assert.Equal("My Exception", e.Message);
+            }
+
+            Assert.True(catched);
         }
 
         [Fact]
@@ -226,7 +259,7 @@ namespace Async
             {
                 await Task.WhenAll(task1, task2);
             }
-            catch(InvalidOperationException e)
+            catch (InvalidOperationException e)
             {
                 catched = true;
                 Assert.Equal("My Exception", e.Message);
